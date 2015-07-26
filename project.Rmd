@@ -81,7 +81,7 @@ featurePlot(x=df_training[,v_features], y = v_classe, plot="pairs")
 
 ## Important Features
 
-Based on the plots, the features that were best at discriminating the _classe_ variable were pitch, roll, and yaw features. Therefore I further filtered the dataset to observations from these important features. Also, I added the factored _classe_ variable back into the dataset.
+Based on the plots, the features that were best at discriminating the _classe_ variable were pitch, roll, and yaw features. Therefore, I further filtered the dataset to observations from these important features. Also, I added the factored _classe_ variable back into the dataset.
 
 ```{r}
 v_names <- names(df_training)
