@@ -1,0 +1,180 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Michael Bessey"
+date: "July 25, 2015"
+output: html_document
+---
+
+# Summary
+
+This report presents a prediction analysis of quantified movement. The data consists of measurements obtained from accelerometers attached to the belt, forearm, arm, and dumbbell of 6 participants, while performing barbell lifts correctly and incorrectly in 5 different ways. The goal of this analysis is to accurately predict the style in which the participants conducted each exercise from a set of unclassified data based on a provided set of classified data.
+
+# Setup
+
+## Environment Configuration
+```{r}
+library(caret)
+```
+
+## Loading Data
+
+When loading the data, I converted any of the following inputs: "NA", "", and "#DIV/0!" into NA values.
+
+```{r}
+c_na_strings <- c("NA", "", "#DIV/0!")
+training <- read.table("pml-training.csv", header = TRUE, sep = ",", strip.white=TRUE, stringsAsFactors=FALSE, na.strings=c_na_strings)
+testing <- read.table("pml-testing.csv", header = TRUE, sep = ",", strip.white=TRUE, stringsAsFactors=FALSE, na.strings=c_na_strings)
+```
+
+## Data Cleanup
+
+To prepare the data for analysis I needed to restrict the dataset to sensor data only. The meta data columns of user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, and num_window would not be useful features when building the prediction model.
+
+
+```{r}
+v_names <- names(training)
+l_sensors <- grep("_arm|_forearm|_dumbbell|_belt", x = v_names)
+df_training <- training[,l_sensors]
+v_classe <- as.factor(training$classe)
+```
+
+
+## Handling Missing Values
+
+```{r}
+l_na_count <- apply(training, 2, function(x){sum(is.na(x))})
+min_na_count <- min(l_na_count[l_na_count > 0])/nrow(training)
+```
+
+I identified missing (NA) values in the dataset and discovered that any column which contained an NA value had at least **`r round(min_na_count * 100, 2) `%** of their values missing. Therefore, I filtered out any column that contained an NA value.
+
+```{r}
+l_col_na <- apply(training, 2, function(x){sum(is.na(x)) <= 0})
+df_training <- training[,l_col_na]
+v_names <- names(df_training)
+```
+
+# Data Exploration
+
+In locating valuable features to use in the prediction model I focused on comparing the measurements of different input types, arm, belt, dumbbell and forearm, against each other. For example, for a specific category of measurement (gyros), I would compare the measurements of arm gyros to belt gyros to dumbbell gyros to forearm gyros. I would make these comparisons through a series of plots and identify the features that were best at separating the _classe_ variable. 
+
+## Plot of Pitch Features
+
+```{r}
+v_features <- names(df_training[,grep("pitch_", x = v_names)])
+featurePlot(x=df_training[,v_features], y = v_classe, plot="pairs")
+```
+
+## Plot of Roll Features
+
+```{r}
+v_features <- names(df_training[,grep("roll_", x = v_names)])
+featurePlot(x=df_training[,v_features], y = v_classe, plot="pairs")
+```
+
+## Plot of Yaw Features
+
+```{r}
+v_features <- names(df_training[,grep("yaw_", x = v_names)])
+featurePlot(x=df_training[,v_features], y = v_classe, plot="pairs")
+```
+
+## Important Features
+
+Based on the plots, the features that were best at discriminating the _classe_ variable were pitch, roll, and yaw features. Therefore I further filtered the dataset to observations from these important features. Also, I added the factored _classe_ variable back into the dataset.
+
+```{r}
+v_names <- names(df_training)
+l_sensors <- grep("roll_|pitch_|yaw_", x = v_names)
+df_training <- df_training[,l_sensors]
+df_training$classe <- v_classe
+```
+
+# Machine Learning Algorithms
+
+I evaluated several machine learning algorithms for the prediction model. I discovered that the longer an algorithm model took to build, the higher the Accuracy and Kappa ratings from the confusion matrix. 
+
+In order to evaluate each machine learning algorithm I split the training data, filtered above, into training and test subsets.
+
+```{r}
+l_train <- createDataPartition(y = df_training$classe, p = 0.6, list=FALSE)
+
+df_train <- df_training[l_train, ]
+df_test <- df_training[-l_train, ]
+```
+
+I then used the training subset to build the model and the test subset to evaluate the model.
+
+## Linear Discriminant Algorithm
+
+```{r}
+modelFit <- train(classe ~ ., data = df_train, method="lda")
+predictions <- predict(modelFit, newdata = df_test)
+m_confusion <- confusionMatrix(predictions, df_test$classe)
+```
+
+Accuracy: **`r m_confusion$overall['Accuracy'] `**
+
+Kappa: **`r m_confusion$overall['Kappa'] `**
+
+
+## Trees Algorithm
+
+```{r}
+modelFit <- train(classe ~ ., data = df_train, method="rpart")
+predictions <- predict(modelFit, newdata = df_test)
+m_confusion <- confusionMatrix(predictions, df_test$classe)
+```
+
+Accuracy: **`r m_confusion$overall['Accuracy'] `**
+
+Kappa: **`r m_confusion$overall['Kappa'] `**
+
+
+## Boosting Algorithm
+
+```{r}
+modelFit <- train(classe ~ ., data = df_train, method="gbm", verbose=FALSE)
+predictions <- predict(modelFit, newdata = df_test)
+m_confusion <- confusionMatrix(predictions, df_test$classe)
+```
+
+Accuracy: **`r m_confusion$overall['Accuracy'] `**
+
+Kappa: **`r m_confusion$overall['Kappa'] `**
+
+
+## Random Forest Algorithm
+
+```{r}
+modelFit <- train(classe ~ ., data = df_train, method="rf")
+predictions <- predict(modelFit, newdata = df_test)
+m_confusion <- confusionMatrix(predictions, df_test$classe)
+```
+
+Accuracy: **`r m_confusion$overall['Accuracy'] `**
+
+Kappa: **`r m_confusion$overall['Kappa'] `**
+
+
+## Model Selection 
+
+I selected the Random Forest algorithm to build the final prediction model since it produced the highest Accuracy and Kappa ratings. The expected out of sample error is **`r round((1 - m_confusion$overall['Accuracy']) * 100, 2) `%**. (1 - Accuracy)
+
+Note: A more accurate measurement of the out of sample error rate would have been to perform K-Fold cross validation, build a Random Forest for each fold, perform predictions and average the error rates. Although, I was unable to complete this task given how long it took to build a Random Forest model.
+
+Here is the complete confusion matrix produced by the test of Random Forest model:
+```{r}
+m_confusion
+```
+
+# Final Prediction
+
+To perform the final prediction I rebuild the Random Forest model using the entire filtered training set. I then used this model to make the final prediction on the unclassified testing dataset.
+
+
+```{r}
+modelFit <- train(classe ~ ., data = df_training, method="rf")
+answers <- predict(modelFit, newdata = testing)
+answers
+```
